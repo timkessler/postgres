@@ -1,7 +1,0 @@
-Running in verbose mode
-
------------------------------------------------------------------
-  pg_upgrade run on Wed Nov 20 15:44:43 2019
------------------------------------------------------------------
-
-could not open version file: /Library/PostgreSQL/9.6/data/PG_VERSION
