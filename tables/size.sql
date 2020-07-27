@@ -1,6 +1,8 @@
 SELECT table_name,
-	pg_size_pretty(total_bytes) AS total
-    , pg_size_pretty(index_bytes) AS index
+	pg_size_pretty(total_bytes) AS total_table_size
+	, pg_size_pretty(table_bytes) AS table_data_size
+    	, pg_size_pretty(toast_bytes) AS toast_size
+    	, pg_size_pretty(index_bytes) AS index_size
   FROM (
 		  SELECT *, total_bytes-index_bytes-coalesce(toast_bytes,0) AS table_bytes 
 		  FROM (
