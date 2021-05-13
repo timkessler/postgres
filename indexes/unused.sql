@@ -7,6 +7,7 @@ FROM pg_catalog.pg_stat_user_indexes s
 WHERE s.idx_scan = 0      -- has never been scanned
   AND 0 <>ALL (i.indkey)  -- no index column is an expression
   AND NOT i.indisunique   -- is not a UNIQUE index
+  AND schemaname='public'
   AND NOT EXISTS          -- does not enforce a constraint
          (SELECT 1 FROM pg_catalog.pg_constraint c
           WHERE c.conindid = s.indexrelid)
