@@ -1,0 +1,161 @@
+1) Remove distinct from the top query  (clinical_charts) except when joined to other tables.  The "id" column makes the row unique.
+2) Can we remove distinct on 2nd query in union? (missed visits)  if not, change it to use "distinct on ".  This will allow the query optimizer to use the primary key index:
+                Select distinct on (missed_visits.id) missed_visits.id, missed_visits.patient_id, missed_visits.role_id, missed_visits.effective_date, current_timestamp AS on_time 
+                FROM missed_visits    
+                WHERE  
+                missed_visits.agency_id = 608 
+                AND missed_visits.effective_date BETWEEN current_date-365 AND current_date 
+                AND missed_visits.patient_id IN (1234)
+
+3) missed_visits needs an index on (agency_id, patient_id, effective_date)
+
+Top total time query (this plan is using one patient that I plugged into the parameter vairables. The actual query in the system has a long list of patients.)
+
+consolo_production=# explain  SELECT DISTINCT clinical_charts.id, clinical_charts.patient_id, clinical_charts.role_id, clinical_charts.effective_date, current_timestamp AS on_time   
+ FROM clinical_charts   
+ WHERE  
+   clinical_charts.agency_id = 608  
+   AND clinical_charts.deleted_at IS NULL  
+   AND clinical_charts.effective_date BETWEEN current_date-365 AND current_date   
+AND clinical_charts.countable = true
+AND clinical_charts.patient_id IN (1234) 
+ UNION ALL  
+ SELECT DISTINCT missed_visits.id, missed_visits.patient_id, missed_visits.role_id, missed_visits.effective_date, current_timestamp AS on_time 
+ FROM missed_visits    
+ WHERE  
+   missed_visits.agency_id = 608 
+   AND missed_visits.effective_date BETWEEN current_date-365 AND current_date 
+AND missed_visits.patient_id IN (1234)
+ LIMIT 50
+ ;
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=4.61..211.92 rows=2 width=24)
+   ->  Append  (cost=4.61..211.92 rows=2 width=24)
+         ->  Unique  (cost=4.61..4.62 rows=1 width=24)
+               ->  Sort  (cost=4.61..4.61 rows=1 width=24)
+                     Sort Key: clinical_charts.id, clinical_charts.role_id, clinical_charts.effective_date
+                     ->  Index Scan using idx_clinical_charts_agency_patient_effective_date_created_at on clinical_charts  (cost=0.57..4.60 rows=1 width=24)
+                           Index Cond: ((agency_id = 608) AND (patient_id = 1234) AND (effective_date >= (CURRENT_DATE - 365)) AND (effective_date <= CURRENT_DATE))
+                           Filter: ((deleted_at IS NULL) AND countable)
+         ->  Unique  (cost=207.26..207.27 rows=1 width=24)
+               ->  Sort  (cost=207.26..207.26 rows=1 width=24)
+                     Sort Key: missed_visits.id, missed_visits.role_id, missed_visits.effective_date
+                     ->  Bitmap Heap Scan on missed_visits  (cost=153.56..207.25 rows=1 width=24)
+                           Recheck Cond: ((agency_id = 608) AND (patient_id = 1234))
+                           Filter: ((effective_date <= CURRENT_DATE) AND (effective_date >= (CURRENT_DATE - 365)))
+                           ->  BitmapAnd  (cost=153.56..153.56 rows=27 width=0)
+                                 ->  Bitmap Index Scan on index_missed_visits_on_agency_id  (cost=0.00..75.65 rows=5497 width=0)
+                                       Index Cond: (agency_id = 608)
+                                 ->  Bitmap Index Scan on index_missed_visits_on_patient_id  (cost=0.00..77.65 rows=5497 width=0)
+                                       Index Cond: (patient_id = 1234)
+(19 rows)
+
+consolo_production=# \d missed_visits
+                                              Table "public.missed_visits"
+         Column         |            Type             | Collation | Nullable |                  Default                  
+------------------------+-----------------------------+-----------+----------+-------------------------------------------
+ id                     | integer                     |           | not null | nextval('missed_visits_id_seq'::regclass)
+ agency_id              | integer                     |           |          | 
+ patient_id             | integer                     |           |          | 
+ effective_date         | date                        |           |          | 
+ user_id                | integer                     |           |          | 
+ role_id                | integer                     |           |          | 
+ missed_visit_reason_id | integer                     |           |          | 
+ comments               | character varying(255)      |           |          | 
+ created_at             | timestamp without time zone |           |          | 
+ updated_at             | timestamp without time zone |           |          | 
+Indexes:
+    "missed_visits_pkey" PRIMARY KEY, btree (id)
+    "index_missed_visits_on_agency_id" btree (agency_id)
+    "index_missed_visits_on_patient_id" btree (patient_id)
+    "index_missed_visits_on_role_id" btree (role_id)
+
+
+
+consolo_production=# \d clinical_charts
+                                                     Table "public.clinical_charts"
+                Column                |            Type             | Collation | Nullable |                   Default                   
+--------------------------------------+-----------------------------+-----------+----------+---------------------------------------------
+ id                                   | integer                     |           | not null | nextval('clinical_charts_id_seq'::regclass)
+ agency_id                            | integer                     |           | not null | 
+ patient_id                           | integer                     |           | not null | 
+ role_id                              | integer                     |           | not null | 
+ user_id                              | integer                     |           | not null | 
+ created_by_id                        | integer                     |           | not null | 
+ effective_date                       | date                        |           | not null | 
+ created_at                           | timestamp without time zone |           |          | 
+ updated_at                           | timestamp without time zone |           |          | 
+ countable                            | boolean                     |           | not null | false
+ nursing_assessment                   | boolean                     |           | not null | false
+ office_id                            | integer                     |           |          | 
+ team_id                              | integer                     |           |          | 
+ deleted_at                           | timestamp without time zone |           |          | 
+ postmortem                           | boolean                     |           | not null | false
+ encounter_type_id                    | integer                     |           |          | 
+ is_service_intensity_countable_visit | boolean                     |           | not null | false
+ charting_client                      | character varying(255)      |           |          | 
+ is_his_countable_visit               | boolean                     |           |          | false
+ uuid                                 | uuid                        |           |          | gen_random_uuid()
+ charting_client_version              | character varying           |           |          | 
+ additional_sections                  | jsonb                       |           |          | 
+ model                                | jsonb                       |           |          | 
+ time_of_visit                        | timestamp without time zone |           |          | 
+ signed_at                            | timestamp without time zone |           |          | 
+ submitted_to_coderyte                | timestamp without time zone |           |          | 
+ visit_classification                 | character varying           |           |          | 
+ facility_id                          | integer                     |           |          | 
+Indexes:
+    "clinical_charts_pkey" PRIMARY KEY, btree (id)
+    "clinical_chart_agency_role_countable" btree (agency_id, role_id, countable)
+    "clinical_charts_agency_patient_encounter_type" btree (agency_id, patient_id, encounter_type_id)
+    "clinical_charts_is_service_intensity_countable_visit_idx" btree (is_service_intensity_countable_visit)
+    "idx_clinical_charts_agency_patient_effective_date_created_at" btree (agency_id, patient_id, effective_date DESC, created_at DESC)
+    "idx_clinical_charts_agency_user_effective_date_created_at" btree (agency_id, user_id, effective_date DESC, created_at DESC)
+    "index_charting_client" btree (agency_id, effective_date, charting_client)
+    "index_clinical_charts_on_agency_id_and_id" btree (agency_id, id) WHERE deleted_at IS NULL AND uuid IS NULL
+    "index_clinical_charts_on_created_by_id" btree (created_by_id)
+    "index_clinical_charts_on_role_id" btree (role_id)
+    "index_clinical_charts_on_signed_at" btree (signed_at)
+    "index_clinical_charts_on_team_id" btree (team_id)
+    "index_clinical_charts_on_user_id" btree (user_id)
+    "index_clinical_charts_on_uuid" UNIQUE, btree (uuid)
+Referenced by:
+    TABLE "scheduled_events" CONSTRAINT "fk_rails_31c809ea1a" FOREIGN KEY (clinical_chart_id) REFERENCES clinical_charts(id) ON DELETE SET NULL
+
+
+# Removing distinct from top query changes cost significantly:
+
+ SELECT  clinical_charts.id, clinical_charts.patient_id, clinical_charts.role_id, clinical_charts.effective_date, current_timestamp AS on_time   
+ FROM clinical_charts   
+ WHERE  
+   clinical_charts.agency_id = 608  
+   AND clinical_charts.deleted_at IS NULL  
+   AND clinical_charts.effective_date BETWEEN current_date-365 AND current_date   
+AND clinical_charts.countable = true
+AND clinical_charts.patient_id IN (1234) 
+ UNION ALL  
+ SELECT DISTINCT missed_visits.id, missed_visits.patient_id, missed_visits.role_id, missed_visits.effective_date, current_timestamp AS on_time 
+ FROM missed_visits    
+ WHERE  
+   missed_visits.agency_id = 608 
+   AND missed_visits.effective_date BETWEEN current_date-365 AND current_date 
+AND missed_visits.patient_id IN (1234)
+ LIMIT 50
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.57..211.90 rows=2 width=24)
+   ->  Append  (cost=0.57..211.90 rows=2 width=24)
+         ->  Index Scan using idx_clinical_charts_agency_patient_effective_date_created_at on clinical_charts  (cost=0.57..4.60 rows=1 width=24)
+               Index Cond: ((agency_id = 608) AND (patient_id = 1234) AND (effective_date >= (CURRENT_DATE - 365)) AND (effective_date <= CURRENT_DATE))
+               Filter: ((deleted_at IS NULL) AND countable)
+         ->  Unique  (cost=207.26..207.27 rows=1 width=24)
+               ->  Sort  (cost=207.26..207.26 rows=1 width=24)
+                     Sort Key: missed_visits.id, missed_visits.role_id, missed_visits.effective_date
+                     ->  Bitmap Heap Scan on missed_visits  (cost=153.56..207.25 rows=1 width=24)
+                           Recheck Cond: ((agency_id = 608) AND (patient_id = 1234))
+                           Filter: ((effective_date <= CURRENT_DATE) AND (effective_date >= (CURRENT_DATE - 365)))
+                           ->  BitmapAnd  (cost=153.56..153.56 rows=27 width=0)
+                                 ->  Bitmap Index Scan on index_missed_visits_on_agency_id  (cost=0.00..75.65 rows=5497 width=0)
+                                       Index Cond: (agency_id = 608)
+                                 ->  Bitmap Index Scan on index_missed_visits_on_patient_id  (cost=0.00..77.65 rows=5497 width=0)
+                                       Index Cond: (patient_id = 1234)

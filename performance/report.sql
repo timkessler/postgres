@@ -29,7 +29,6 @@ echo  **************************************************************************
 echo Rank By Total seconds:
 echo ******************************************************************************************************************************************************
 
-
 SELECT * FROM (SELECT  sum(total_time) OVER () / 1000 total_time, rank() OVER ( ORDER BY total_time DESC) rank_total_seconds ,
 round(total_time/1000) total_seconds, calls,
 round( CAST((total_time/calls) AS NUMERIC),1) avg_ms, 
@@ -46,9 +45,48 @@ ORDER BY total_seconds DESC
 ) t2 
 --where avg_seconds > .2
 ORDER BY rank_total_seconds
-LIMIT 50
+LIMIT 10
 ;
 
+
+
+echo ******************************************************************************************************************************************************
+echo Extrapolated Annual Customer Value for Top 10 queries (based on wage average increments) 
+echo ******************************************************************************************************************************************************
+
+with 
+	c1 as (select now() - pg_postmaster_start_time() as time_since_startup),
+	c2 as (select extract(epoch from (time_since_startup)) as seconds_since_startup from c1),
+	c3 as (select seconds_since_startup/ (60*60*24) as hours_since_startup from c2),
+	constants as (select (36500.0 / cast ((hours_since_startup * 100) as integer)) as extrapolate_to_annual from c3 )
+select  
+	cast((total_hours * extrapolate_to_annual / 12) as integer) as monthly_hours_top10_sql,
+	cast((total_hours * extrapolate_to_annual) as integer) as annual_hours_top10_sql,
+	cast(cast((total_hours *  8 * extrapolate_to_annual) as integer) as money)  as annual_customer_value_wage_8dph,
+	cast(cast((total_hours * 10 * extrapolate_to_annual) as integer) as money)  as annual_customer_value_wage_10dph,
+	cast(cast((total_hours * 12 * extrapolate_to_annual) as integer) as money)  as annual_customer_value_wage_12dph,
+	cast(cast((total_hours * 14 * extrapolate_to_annual) as integer) as money)  as annual_customer_value_wage_14dph
+from constants 
+cross join 
+(
+	select  
+		sum(total_seconds) / 60 / 60 total_hours
+	from 
+
+	(
+		SELECT * FROM (
+			SELECT  
+				round(total_time/1000) total_seconds
+			FROM pg_stat_statements 
+			WHERE query not like '%pg_%' and QUERY NOT LIKE 'COPY%' AND QUERY NOT LIKE 'CREATE%' AND QUERY NOT LIKE 'ALTER%' 
+			AND QUERY NOT LIKE 'SET application_name%' 
+			AND calls > 1
+			ORDER BY total_seconds DESC
+		) t2 
+	LIMIT 10
+	) t3
+) t2
+;
 
 
 
