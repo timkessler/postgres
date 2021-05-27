@@ -1,6 +1,9 @@
 
 -- This query will kill a session. 
 
+-- Kill a specific pid
+SELECT pg_terminate_backend(pid);
+
 -- Kill only a specific blocking query
  SELECT pg_terminate_backend(pid)
  from (
