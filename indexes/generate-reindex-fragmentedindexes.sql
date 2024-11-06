@@ -114,5 +114,6 @@ FROM (
   ) AS rows_hdr_pdg_stats
 ) AS relation_stats
 ) t1
-where  (bloat_ratio > 40 or leaf_fragmentation> 25) and tblname in ('patient_assignment_metadata', 'claim_health_conditions','scheduled_events')  
+where  (bloat_ratio > 40 or leaf_fragmentation> 25) 
+    --and tblname in (<table_name_list>)
 ORDER BY bloat_size_mb desc 
