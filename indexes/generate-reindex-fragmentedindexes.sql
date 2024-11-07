@@ -1,8 +1,4 @@
 
-SELECT relname, n_live_tup, n_dead_tup, *
-FROM pg_stat_user_tables where relname='claims'
-ORDER BY n_dead_tup DESC;
-
 -- WARNING: executed with a non-superuser role, the query inspect only index on tables you are granted to read.
 -- WARNING: rows with is_na = 't' are known to have bad statistics ("name" type is not supported).
 -- This query is compatible with PostgreSQL 8.2 and after
