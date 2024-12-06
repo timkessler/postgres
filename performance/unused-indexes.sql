@@ -7,7 +7,7 @@
 SELECT 
     ( pg_relation_size(s.indexrelid)) /1024/1024 index_size_mb,
     schemaname,relname table_name,indexrelname index_name, 
-    idx_scan,idx_tup_read,idx_tup_fetch,
+    idx_scan,idx_tup_read,idx_tup_fetch
     ,i.indisunique 
 FROM pg_catalog.pg_stat_user_indexes s
     JOIN pg_catalog.pg_index i ON s.indexrelid = i.indexrelid
