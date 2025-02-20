@@ -1,0 +1,29 @@
+-- This function allows a reader node query to wait for replication to catch up to the current timestamp.
+-- this example waits up to 5 mins to catch up
+-- SELECT * from my_table where wait_for_replication_consistency(current_timestamp, '1 minutes') = true; 
+
+CREATE OR REPLACE FUNCTION wait_for_replication_consistency(start_time TIMESTAMPTZ, timeout INTERVAL)
+RETURNS BOOLEAN LANGUAGE plpgsql AS $$
+DECLARE
+    start_time_passed BOOLEAN := false;
+    replication_caught_up BOOLEAN := false;
+    start_time_limit TIMESTAMPTZ := NOW() + timeout;
+BEGIN
+    IF pg_is_in_recovery() THEN
+        RAISE EXCEPTION 'This function should be run on a standby server.';
+    END IF;
+
+    WHILE NOT replication_caught_up AND NOW() < start_time_limit LOOP
+        PERFORM pg_sleep(1);  -- Wait for 1 second before checking again
+
+        SELECT pg_last_xact_replay_timestamp() >= start_time INTO replication_caught_up;
+    END LOOP;
+
+    IF replication_caught_up THEN
+        RETURN true;
+    ELSE
+        RAISE WARNING 'Replication did not catch up within the specified timeout.';
+        RETURN false;
+    END IF;
+END;
+$$;
