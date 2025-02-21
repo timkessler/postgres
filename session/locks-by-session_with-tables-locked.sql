@@ -2,16 +2,6 @@
 \x on 
 \pset pager off 
 
-SELECT 
-    l.*,
-    c.relname AS table_name
-FROM 
-    pg_locks l
-LEFT JOIN 
-    pg_class c ON l.relation = c.oid
-WHERE 
-    c.relkind = 'r'
-
 with blocker_waiters as
 (
     WITH RECURSIVE l AS (
