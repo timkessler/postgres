@@ -1,0 +1,14 @@
+SELECT 
+    t.relname AS table_name,
+    s.seq_scan AS sequential_scans,
+    pg_size_pretty(pg_relation_size(t.oid)) AS table_size,
+    s.seq_scan * (pg_relation_size(t.oid) / 1024 / 1024) AS scan_size_impact_mb,
+    s.seq_tup_read AS tuples_read
+FROM 
+    pg_stat_user_tables s
+    JOIN pg_class t ON s.relid = t.oid
+WHERE 
+    s.seq_scan > 0
+ORDER BY 
+    scan_size_impact_mb DESC
+limit 10;
